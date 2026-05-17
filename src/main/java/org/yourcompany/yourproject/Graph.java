@@ -9,8 +9,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -98,30 +96,17 @@ public class Graph {
         return om.readValue(file, Graph.class);
     }
 
-    private static List<String> parseQuotedFields(String line) {
-        List<String> out = new ArrayList<>();
-        if (line == null) return out;
-        Matcher m = Pattern.compile("'([^']*)'|\"([^\"]*)\"|(\\S+)").matcher(line);
-        while (m.find()) {
-            String v = m.group(1);
-            if (v == null) v = m.group(2);
-            if (v == null) v = m.group(3);
-            out.add(v);
-        }
-        return out;
-    }
-
     public void loadNodesFromTxt(File file) throws IOException {
         List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
         for (String line : lines) {
             String trimmed = line.trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
-            List<String> f = parseQuotedFields(trimmed);
-            if (f.size() >= 3) {
-                String id = f.get(0);
+            if (trimmed.isEmpty()) continue;
+            String[] parts = trimmed.split("\\s+");
+            if (parts.length >= 3) {
+                String id = parts[0];
                 try {
-                    double x = Double.parseDouble(f.get(1));
-                    double y = Double.parseDouble(f.get(2));
+                    double x = Double.parseDouble(parts[1]);
+                    double y = Double.parseDouble(parts[2]);
                     Node n = nodes.get(id);
                     if (n == null) {
                         addNode(new Node(id, x, y));
@@ -138,13 +123,9 @@ public class Graph {
 
     public void saveNodesToTxt(File file) throws IOException {
         List<String> out = nodes.values().stream()
-                .map(n -> String.format("'%s' '%s' '%s'", n.getId(), n.getX(), n.getY()))
+                .map(n -> String.format("%s %s %s", n.getId(), n.getX(), n.getY()))
                 .collect(Collectors.toList());
         Files.write(file.toPath(), out, StandardCharsets.UTF_8);
-    }
-
-    public void loadConnectionsFromTxt(File file) throws IOException {
-        loadConnectionsFromTxt(file, new ArrayList<>());
     }
 
     public List<String> loadConnectionsFromTxt(File file, List<String> invalidLines) throws IOException {
@@ -152,17 +133,23 @@ public class Graph {
         for (String line : lines) {
             String trimmed = line.trim();
             if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
-            List<String> f = parseQuotedFields(trimmed);
-            if (f.size() >= 4) {
-                String name = f.get(0);
-                String nodeA = f.get(1);
-                String nodeB = f.get(2);
+            String[] parts = trimmed.split("\\s+");
+            if (parts.length >= 4) {
+                String name = parts[0];
+                String nodeA = parts[1];
+                String nodeB = parts[2];
                 try {
-                    double weight = Double.parseDouble(f.get(3));
-                    if (nodes.containsKey(nodeA) && nodes.containsKey(nodeB)) {
-                        connections.add(new Connection(name, nodeA, nodeB, weight));
-                    } else {
+                    double weight = Double.parseDouble(parts[3]);
+                    if (nodeA.isEmpty() || nodeB.isEmpty()) {
                         invalidLines.add(trimmed);
+                    } else {
+                        if (!nodes.containsKey(nodeA)) {
+                            addNode(new Node(nodeA, 0, 0));
+                        }
+                        if (!nodes.containsKey(nodeB)) {
+                            addNode(new Node(nodeB, 0, 0));
+                        }
+                        connections.add(new Connection(name, nodeA, nodeB, weight));
                     }
                 } catch (NumberFormatException ex) {
                     invalidLines.add(trimmed);
@@ -173,10 +160,10 @@ public class Graph {
         }
         return invalidLines;
     }
-
+//nie wiem czy to jest potrzebne, ale dla symetrii z loadConnectionsFromTxt
     public void saveConnectionsToTxt(File file) throws IOException {
         List<String> out = connections.stream()
-                .map(c -> String.format("'%s' '%s' '%s' '%s'", c.getName(), c.getFrom(), c.getTo(), c.getWeight()))
+                .map(c -> String.format("%s %s %s %s", c.getName(), c.getFrom(), c.getTo(), c.getWeight()))
                 .collect(Collectors.toList());
         Files.write(file.toPath(), out, StandardCharsets.UTF_8);
     }
